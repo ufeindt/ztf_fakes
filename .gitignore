@@ -1,3 +1,16 @@
+# Everything in the test directory
+tests/*
+test-requirements.txt
+
+# Skeleton structure
+skeleton.py
+
+# Config files
+*.ini
+# Setup files
+setup.cfg
+setup.py
+
 # Temporary and binary files
 *~
 *.py[cod]

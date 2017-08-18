@@ -3,13 +3,17 @@ ztf_fakes
 =========
 
 
-Add a short description here!
+Infrastucture to inject fakes into a telescope image.
 
 
 Description
 ===========
 
-A longer description of your project goes here...
+Preliminary infrastructure for injecting fakes into a the image stream of ZTF pipeline. One of the
+aims is to test the efficiency of the image processing pipeline. This was done previous for the
+PTF survey by Frohmaier et. al. 
+(http://iopscience.iop.org/article/10.3847/1538-4365/aa6d70/meta)
+(https://arxiv.org/ct?url=http%3A%2F%2Fdx.doi.org%2F10%252E3847%2F1538-4365%2Faa6d70&v=b6c5a7b8) 
 
 
 Note
