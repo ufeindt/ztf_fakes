@@ -1,6 +1,6 @@
 # Everything in the test directory
-tests/*
-test-requirements.txt
+ztf_fakes/tests
+ztf_fakes/test-requirements.txt
 
 # Skeleton structure
 skeleton.py
@@ -8,8 +8,7 @@ skeleton.py
 # Config files
 *.ini
 # Setup files
-setup.cfg
-setup.py
+ztf_fakes/setup*
 
 # Temporary and binary files
 *~

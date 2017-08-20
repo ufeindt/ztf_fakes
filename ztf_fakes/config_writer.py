@@ -44,5 +44,18 @@ config['galaxy_checks'] = {
     'max_FWHM'        : '15.0'
 }
 
+config['fake_card_info'] = {
+    'card_name'       : 'FAKE',
+    'card_value'      : '',
+    'card_comment'    : '',
+    'insert_after_card':'ORIGIN'
+}
+
+config['clone_stamped_injection'] = {
+    'delta_x'         : '20',
+    'delta_y'         : '20',
+    'stamp_original'  : 'false'
+}
+
 with open('etc/conf.ini','w') as configfile:
     config.write(configfile)

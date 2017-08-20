@@ -1,4 +1,5 @@
 import numpy as np
+import astropy
 from astropy.io import fits
 from astropy.table import Table
 import logging
@@ -12,7 +13,7 @@ class CalibratedImage:
         'IMAGEZPT', 'GAIN', 'SEEING', 'CCDID', 'PTFFIELD',
         'READNOI', 'MOONILLF', 'AIRMASS', 'ELLIP',
         'MOONRA', 'MOONDEC', 'OBSMJD'
-                    ]
+    ]
     ### new names of the SE table columns for ease of notation
     __working_params__ = [
         'id', 'flags', 'flux', 'mag', 'x', 'y', 'bkgnd', 'elgn',
@@ -137,7 +138,7 @@ class CalibratedImage:
             tab = Table.read(self.SE_cat)
         except:
             if self.logger:
-                logger.error('Error loading SE catalog for %s'%(self.fits_file))
+                self.logger.error('Error loading SE catalog for %s'%(self.fits_file))
         else:
             self.SE_info_table = tab[CalibratedImage.__SE_params__]
             ### Rename column names to ease usage
@@ -492,6 +493,9 @@ class CalibratedImage:
         Perform checks in _star_checks
         '''
         res = np.ones(len(self.SE_info_table)).astype('bool')
+        for check in CalibratedImage._common_checks:
+            eval_str = 'self.'+check+'()'
+            res *= eval(eval_str)
         for check in CalibratedImage._star_checks:
             ###FIXME: Could be fragile
             eval_str = 'self.'+check+'()'
@@ -503,6 +507,9 @@ class CalibratedImage:
         Perform checks in _gal_checks
         '''
         res = np.ones(len(self.SE_info_table)).astype('bool')
+        for check in CalibratedImage._common_checks:
+            eval_str = 'self.'+check+'()'
+            res *= eval(eval_str)
         for check in CalibratedImage._gal_checks:
             ###FIXME: Could be fragile
             eval_str = 'self.'+check+'()'
@@ -539,4 +546,172 @@ class CalibratedImage:
         '''
         Run source extractor on the image and store it to a catalog
         '''
-        raise NotImplementedError
+        raise NotImplementedError           
+
+
+class Injection(CalibratedImage):
+    '''
+    A fake image.
+    '''
+    name = "Injection"
+        
+    def __init__(self, fits_file, SE_cat,
+                 num_inj=1,  
+                 config=None, 
+                 logger=None
+                ):
+        
+        CalibratedImage.__init__(self,fits_file, SE_cat, config=config, logger=logger)
+        self.num_inj = num_inj
+        self._addFakeCard()
+        
+        
+    def _sanity_checks(self):
+        '''
+        Try the sanity checks
+        '''
+        pass
+    
+    def _addFakeCard(self):
+        '''
+        Adds a header to the image to denote fake image
+        '''
+        if not self.config.has_section('fake_card_info'): return None
+        
+        name   = self.config.get('fake_card_info','card_name')
+        value  = self.config.get('fake_card_info','card_value')
+        comment=self.config.get('fake_card_info','card_comment')
+        
+        insert_after_card=self.config.get('fake_card_info','insert_after_card')
+        ### Avoid multiple insertion of the fake card
+        if name.upper() not in self.img_header.keys():
+            card = fits.Card(name, value, comment)
+            self.img_header.insert(insert_after_card, card)
+
+
+class CloneStampedInjection(Injection):
+    '''
+    Performs injections according to clone stamping method.
+    Brightest stars in the randomly chosen galaxies
+    '''
+    name = "CloneStampedInjection"
+    
+    def __init__(self, fits_file, SE_cat, 
+                 num_inj,
+                 config,
+                 logger=None
+                ):
+        Injection.__init__(self, fits_file, SE_cat, num_inj, config, logger)
+        
+        ### presence of clone stamping section is required
+        #assert self.config.has_section['clone_stamped_injection']
+        
+        ### read the dimensions of the stamping region
+        self.delta_x = self.config.getint('clone_stamped_injection','delta_x')
+        self.delta_y = self.config.getint('clone_stamped_injection','delta_y')
+        ### make changes to the original image?
+        self.stamp_original = self.config.getboolean('clone_stamped_injection','stamp_original')
+        
+    def getBrightStars(self):
+        '''
+        Returns astropy table with num_inj brightest stars, sorted based on flux
+        '''
+        star_table     = self.giveStarsTable()
+        sorted_on_flux = star_table[np.argsort(-star_table['flux'])]
+        return sorted_on_flux[:self.num_inj]
+    
+    def getBrightGalaxies(self):
+        '''
+        Returns astropy table with num_inj bright galaxies from the galaxy list
+        '''
+        gal_table      = self.giveGalaxiesTable()
+        sorted_on_flux = gal_table[np.argsort(-gal_table['flux'])]
+        return sorted_on_flux[:self.num_inj]
+
+    def getDimStars(self):
+        '''
+        Returns astropy table with num_inj dimmest stars, sorted based on flux
+        '''
+        star_table     = self.giveStarsTable()
+        sorted_on_flux = star_table[np.argsort(star_table['flux'])]
+        return sorted_on_flux[:self.num_inj]
+    
+    def getDimGalaxies(self):
+        '''
+        Returns astropy table with num_inj dim galaxies from the galaxy list
+        '''
+        gal_table      = self.giveGalaxiesTable()
+        sorted_on_flux = gal_table[np.argsort(gal_table['flux'])]
+        return sorted_on_flux[:self.num_inj]
+    
+    def stampBrightsInDims(self):
+        '''
+        Stamp dim galaxies with bright stars
+        '''
+        stars    = self.getBrightStars()
+        galaxies = self.getDimGalaxies()
+        ### same number of stars and galaxies
+        assert len(stars) == len(galaxies)
+        ### create a copy of the image data
+        duplicate_image = np.copy(self.img_data)
+        ### randomize any one set, say stars, cast into Table object
+        stars = Table(np.random.choice(stars, self.num_inj))
+        ### make a list of offsets
+        ###FIXME: offset choice currently random. Need rationale
+        offset_list = np.arange(-5,6)
+        ### Loop over and stamp
+        for idx, star in enumerate(stars):
+            galaxy = galaxies[idx]
+            duplicate_image = \
+            CloneStampedInjection._stamp(duplicate_image, star, galaxy,\
+                                                           delta_x=self.delta_x,\
+                                                           delta_y=self.delta_y,\
+                                                           scale_fac=1.0,\
+                                                           offset_x=np.random.choice(offset_list),\
+                                                           offset_y=np.random.choice(offset_list)\
+                                                          )
+        
+        if self.stamp_original:
+            self.img_data = duplicate_image
+        
+        return duplicate_image
+    
+    @staticmethod
+    def _stamp(image, source, target, \
+                   delta_x=20,\
+                   delta_y=20,\
+                   scale_fac=1.0,\
+                   offset_x=1,\
+                   offset_y=1):
+        '''
+        FUNCTION :: Stamps source location into target location.
+        INPUTS   :: image    - fits image data
+                    source   - astropy row source to stamp
+                    target   - astropy row where to stamp
+                    scale_fac- factor by which to blow source up
+                    offset_x - offset from targetx while stamping
+                    offset_y - offset from targety while stamping
+        OUTPUT   :: numpy 2D array of new image
+        WARNING  :: Built ad-hoc, use with care.
+        '''
+        assert isinstance(source, astropy.table.row.Row) and \
+                isinstance(target, astropy.table.row.Row)
+        
+        ### create a duplicate image
+        #duplicate_image = np.copy(self.img_data)
+        ### source patch
+        source_x_lo = int( source['x'] - delta_x/2.0 )
+        source_x_hi = int( source['x'] + delta_x/2.0 )
+        source_y_lo = int( source['y'] - delta_y/2.0 )
+        source_y_hi = int( source['y'] + delta_y/2.0 )
+        ### target patch
+        target_x_lo = int( target['x'] - delta_x/2.0 ) + offset_x
+        target_x_hi = int( target['x'] + delta_x/2.0 ) + offset_x
+        target_y_lo = int( target['y'] - delta_y/2.0 ) + offset_y
+        target_y_hi = int( target['y'] + delta_y/2.0 ) + offset_y
+        
+        patch = ( image[source_y_lo:source_y_hi, source_x_lo:source_x_hi] \
+            - source['bkgnd'] ) * scale_fac
+        image[target_y_lo:target_y_hi, target_x_lo:target_x_hi] += patch
+        
+        return image
