@@ -597,8 +597,8 @@ class CloneStampedInjection(Injection):
     name = "CloneStampedInjection"
     
     def __init__(self, fits_file, SE_cat, 
-                 num_inj,
-                 config,
+                 num_inj=1,
+                 config=None,
                  logger=None
                 ):
         Injection.__init__(self, fits_file, SE_cat, num_inj, config, logger)
